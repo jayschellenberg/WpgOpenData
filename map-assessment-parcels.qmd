@@ -17,7 +17,6 @@ execute:
 
 Interactive 3D map of Winnipeg's property assessment parcels.
 **Height** encodes total assessed value; **color** encodes neighbourhood.
-Use the **search bar** (top left) to find any address in Winnipeg.
 Hover over a parcel to see its assessed value, roll number, and how it compares to the neighbourhood median.
 Use the **layer toggle** (bottom left) to switch to a neighbourhood-level view comparing total assessed value across neighbourhoods.
 
@@ -305,11 +304,7 @@ m <- maplibre(
   bearing = 0,
   projection = "mercator"
 ) |>
-  add_navigation_control(position = "top-right") |>
-  add_geocoder_control(
-    position = "top-left",
-    placeholder = "Search for an address..."
-  )
+  add_navigation_control(position = "top-right")
 
 # Neighbourhood choropleth layer (hidden by default)
 m <- m |>
@@ -671,10 +666,6 @@ if (use_local_data) {
     projection = "mercator"
   ) |>
     add_navigation_control(position = "top-right") |>
-    add_geocoder_control(
-      position = "top-left",
-      placeholder = "Search for an address..."
-    ) |>
     add_fill_extrusion_layer(
       id = "wpg-change-3d",
       source = parcels_sf,
@@ -712,10 +703,6 @@ if (use_local_data) {
     projection = "mercator"
   ) |>
     add_navigation_control(position = "top-right") |>
-    add_geocoder_control(
-      position = "top-left",
-      placeholder = "Search for an address..."
-    ) |>
     add_pmtiles_source(
       id = "wpg-change-source",
       url = pmtiles_url
