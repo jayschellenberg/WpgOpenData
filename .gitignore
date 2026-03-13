@@ -1,0 +1,35 @@
+# Data files (too large for git)
+data/*.parquet
+data/*.geojson
+data/*.csv
+data/*.pmtiles
+data/temp/
+
+# Quarto render output
+_site/
+_freeze/
+*.html
+
+# GitHub Pages deployment (keep these tracked)
+!docs/
+!docs/**
+
+# R artifacts
+.Rhistory
+.RData
+.RDataTmp*
+.Rproj.user/
+
+# Claude Code config
+.claude/
+
+# Quarto render intermediates
+*_files/
+!docs/**
+
+# OS files
+Thumbs.db
+.DS_Store
+
+/.quarto/
+**/*.quarto_ipynb

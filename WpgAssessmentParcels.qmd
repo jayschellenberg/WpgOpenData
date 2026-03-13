@@ -1,0 +1,251 @@
+---
+title: "Download Winnipeg Assessment Parcels"
+subtitle: "Socrata SODA API — Full Dataset with Geometry"
+author: "WpgOpenData"
+date: today
+format:
+  html:
+    toc: true
+    code-fold: show
+    code-summary: "Show code"
+    embed-resources: true
+execute:
+  eval: false
+  echo: true
+  warning: true
+  message: true
+---
+
+## Overview
+
+Downloads all ~245,000 assessment parcel records (with MultiPolygon geometry)
+from the [City of Winnipeg Open Data portal](https://data.winnipeg.ca/Assessment-Taxation-Corporate/Assessment-Parcels/d4mq-wa44/about_data)
+via the Socrata SODA API. Saves as a date-stamped GeoParquet file.
+
+The API defaults to 1,000 rows per request. We use `$limit=50000` with
+`$offset` pagination to download all rows in ~5 batches.
+
+## Setup
+
+```{r}
+#| label: setup
+
+library(httr2)
+library(readr)
+library(dplyr)
+library(sf)
+library(arrow)
+library(geoarrow)
+library(cli)
+library(fs)
+library(glue)
+library(ggplot2)
+```
+
+## Configuration
+
+```{r}
+#| label: config
+
+base_url <- "https://data.winnipeg.ca/resource/d4mq-wa44"
+batch_size <- 50000
+output_dir <- "data"
+force_download <- FALSE
+
+# Create output directory
+fs::dir_create(output_dir)
+
+# Output file path with today's date
+output_file <- fs::path(output_dir, glue("assessment-parcels-{Sys.Date()}.parquet"))
+
+# Check if today's file already exists
+if (fs::file_exists(output_file) && !force_download) {
+  cli_alert_warning("File already exists: {output_file}")
+  cli_alert_info("Set force_download <- TRUE to re-download")
+}
+```
+
+## Query Row Count
+
+```{r}
+#| label: row-count
+
+count_resp <- request(glue("{base_url}.json")) |>
+  req_url_query(`$select` = "count(*) as total") |>
+  req_retry(max_tries = 3, backoff = ~10) |>
+  req_perform()
+
+total_rows <- count_resp |>
+  resp_body_json() |>
+  purrr::pluck(1, "total") |>
+  as.integer()
+
+n_batches <- ceiling(total_rows / batch_size)
+
+cli_alert_info("Total rows: {format(total_rows, big.mark = ',')}")
+cli_alert_info("Batch size: {format(batch_size, big.mark = ',')}")
+cli_alert_info("Batches needed: {n_batches}")
+```
+
+## Download Batches
+
+```{r}
+#| label: download
+
+download_batch <- function(offset, batch_num, n_batches) {
+  cli_alert_info(
+    "Downloading batch {batch_num}/{n_batches} (offset {format(offset, big.mark = ',')})"
+  )
+
+  resp <- request(glue("{base_url}.csv")) |>
+    req_url_query(
+      `$limit` = batch_size,
+      `$offset` = offset,
+      `$order` = ":id"
+    ) |>
+    req_retry(max_tries = 3, backoff = ~10) |>
+    req_throttle(rate = 1 / 2) |>
+    req_perform()
+
+  raw_csv <- resp_body_string(resp)
+  batch_df <- read_csv(raw_csv, show_col_types = FALSE,
+                       col_types = cols(roll_number = col_character()))
+
+  probs <- problems(batch_df)
+  if (nrow(probs) > 0) {
+    cli_alert_warning("Batch {batch_num}: {nrow(probs)} parsing issue(s)")
+    print(probs)
+  }
+
+  cli_alert_success(
+    "Batch {batch_num}: {format(nrow(batch_df), big.mark = ',')} rows, {ncol(batch_df)} columns"
+  )
+
+  batch_df
+}
+
+# Skip download if file exists and not forcing
+if (!fs::file_exists(output_file) || force_download) {
+  offsets <- seq(0, by = batch_size, length.out = n_batches)
+
+  batches <- lapply(seq_along(offsets), function(i) {
+    download_batch(offsets[i], i, n_batches)
+  })
+
+  cli_alert_success("All {n_batches} batches downloaded")
+} else {
+  cli_alert_info("Skipping download — file exists: {output_file}")
+}
+```
+
+## Combine and Convert to Spatial
+
+```{r}
+#| label: combine
+
+if (!fs::file_exists(output_file) || force_download) {
+  combined_df <- bind_rows(batches)
+
+  cli_alert_info("Combined: {format(nrow(combined_df), big.mark = ',')} rows")
+
+  # Check geometry column
+  n_missing_geom <- sum(is.na(combined_df$geometry) | combined_df$geometry == "")
+  if (n_missing_geom > 0) {
+    cli_alert_warning("{n_missing_geom} rows have missing geometry")
+  }
+
+  # Filter to rows with valid geometry for sf conversion
+  has_geom <- !is.na(combined_df$geometry) & combined_df$geometry != ""
+  df_with_geom <- combined_df[has_geom, ]
+  df_no_geom <- combined_df[!has_geom, ]
+
+  # Convert WKT geometry to sf
+  cli_alert_info("Converting WKT geometry to sf object...")
+  parcels_sf <- st_as_sf(df_with_geom, wkt = "geometry", crs = 4326)
+
+  # Validate row count
+  expected <- total_rows
+  actual <- nrow(parcels_sf) + nrow(df_no_geom)
+  if (abs(actual - expected) > 100) {
+    cli_alert_warning(
+      "Row count mismatch: expected ~{format(expected, big.mark = ',')} but got {format(actual, big.mark = ',')}"
+    )
+  } else {
+    cli_alert_success(
+      "Row count validated: {format(actual, big.mark = ',')} rows (expected ~{format(expected, big.mark = ',')})"
+    )
+  }
+
+  cli_alert_success("sf object created with {format(nrow(parcels_sf), big.mark = ',')} features")
+}
+```
+
+## Write GeoParquet
+
+```{r}
+#| label: write-parquet
+
+if (!fs::file_exists(output_file) || force_download) {
+  cli_alert_info("Writing GeoParquet: {output_file}")
+  write_parquet(parcels_sf, output_file)
+
+  file_size <- fs::file_size(output_file)
+  cli_alert_success("GeoParquet written: {file_size}")
+
+  # Save rows without geometry separately if any exist
+  if (nrow(df_no_geom) > 0) {
+    no_geom_file <- fs::path(output_dir, glue("assessment-parcels-no-geometry-{Sys.Date()}.csv"))
+    write_csv(df_no_geom, no_geom_file)
+    cli_alert_info("{nrow(df_no_geom)} rows without geometry saved to {no_geom_file}")
+  }
+}
+```
+
+## Summary
+
+```{r}
+#| label: summary
+
+# Read back the parquet to verify
+# geoarrow_vctr geometry must be converted to sfc before sf functions work
+parcels_sf <- read_parquet(output_file) |>
+  mutate(geometry = st_as_sfc(geometry)) |>
+  st_as_sf()
+
+cli_h1("Dataset Summary")
+cli_alert_info("Rows: {format(nrow(parcels_sf), big.mark = ',')}")
+cli_alert_info("Columns: {ncol(parcels_sf)}")
+cli_alert_info("CRS: {st_crs(parcels_sf)$input}")
+cli_alert_info("Bounding box:")
+print(st_bbox(parcels_sf))
+cli_alert_info("File size: {fs::file_size(output_file)}")
+
+glimpse(parcels_sf)
+```
+
+## Quick Validation Map
+
+A random sample of 1,000 parcels to visually confirm geometry is correct.
+
+```{r}
+#| label: validation-map
+#| fig-width: 10
+#| fig-height: 8
+
+set.seed(42)
+sample_parcels <- parcels_sf |> slice_sample(n = 1000)
+
+ggplot(sample_parcels) +
+  geom_sf(aes(fill = total_assessed_value), color = NA, alpha = 0.7) +
+  scale_fill_viridis_c(
+    name = "Total Assessed Value",
+    labels = scales::dollar,
+    trans = "log10"
+  ) +
+  labs(
+    title = "Winnipeg Assessment Parcels (Random Sample, n=1,000)",
+    subtitle = glue("Downloaded {Sys.Date()} — {format(nrow(parcels_sf), big.mark = ',')} total parcels"),
+    caption = "Source: City of Winnipeg Open Data"
+  ) +
+  theme_minimal()
+```
