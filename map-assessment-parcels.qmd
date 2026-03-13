@@ -79,7 +79,7 @@ cli_alert_info("Download date: {file_date}")
 cli_alert_info("File size: {fs::file_size(input_file)}")
 ```
 
-## City Overview — `r asmt_year` Assessment Roll (Base Value Date: `r base_value_date`)
+## City Overview
 
 ```{r}
 #| label: city-overview
@@ -99,7 +99,7 @@ top_neighbourhood <- parcels_all |>
   slice_max(total, n = 1)
 ```
 
-Winnipeg's assessment roll covers **`r format(n_parcels, big.mark = ",")`** property parcels across **`r n_neighbourhoods`** neighbourhoods, with a combined assessed value of **`r dollar(total_assessed, accuracy = 1, scale = 1e-9, suffix = "B")`**. The median property assessment is **`r dollar(median_assessed, accuracy = 1)`**. The largest neighbourhood by total assessed value is **`r top_neighbourhood$neighbourhood_area`** at `r dollar(top_neighbourhood$total, accuracy = 1, scale = 1e-9, suffix = "B")`.
+Winnipeg's assessment roll (`r asmt_year` — `r base_value_date` reference date) covers **`r format(n_parcels, big.mark = ",")`** property parcels across **`r n_neighbourhoods`** neighbourhoods, with a combined assessed value of **`r dollar(total_assessed, accuracy = 1, scale = 1e-9, suffix = "B")`**. The median property assessment is **`r dollar(median_assessed, accuracy = 1)`**. The largest neighbourhood by total assessed value is **`r top_neighbourhood$neighbourhood_area`** at `r dollar(top_neighbourhood$total, accuracy = 1, scale = 1e-9, suffix = "B")`.
 
 Data source: [City of Winnipeg Assessment Parcels](https://data.winnipeg.ca/Assessment-Taxation-Corporate/Assessment-Parcels/d4mq-wa44) (downloaded `r file_date`).
 
@@ -423,7 +423,7 @@ m <- m |>
 m
 ```
 
-## Assessed Value by Neighbourhood — `r asmt_year` Assessment Roll (Base Value Date: `r base_value_date`)
+## Assessed Value by Neighbourhood (`r asmt_year`)
 
 ```{r}
 #| label: summary-stats
