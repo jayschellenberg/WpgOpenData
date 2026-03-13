@@ -141,9 +141,17 @@ parcels_sf <- parcels_sf |>
     Neighbourhood_Median_Fmt = if_else(
       is.na(Neighbourhood_Median), "N/A", dollar(Neighbourhood_Median, accuracy = 1)
     ),
-    Total_Value_Fmt = dollar(total_assessed_value, accuracy = 1)
+    Total_Value_Fmt = dollar(total_assessed_value, accuracy = 1),
+    # Compute per-parcel % change for the 3D change map
+    pct_change = if_else(
+      !is.na(total_assessed_value) & !is.na(total_proposed_assessment_value) & total_assessed_value > 0,
+      (total_proposed_assessment_value - total_assessed_value) / total_assessed_value * 100,
+      NA_real_
+    ),
+    pct_change_fmt = if_else(is.na(pct_change), "N/A", paste0(round(pct_change, 1), "%"))
   ) |>
   select(roll_number, total_assessed_value, Total_Value_Fmt,
+         total_proposed_assessment_value, pct_change, pct_change_fmt,
          Neighbourhood_Median, Neighbourhood_Median_Fmt,
          full_address, neighbourhood_area,
          property_use_code, building_type, year_built,
@@ -238,7 +246,9 @@ neighbourhood_names <- parcels_df$neighbourhood_area
 neighbourhood_colors <- rep_len(palette, length(neighbourhood_names))
 ```
 
-## 3D Map
+## Assessed Value by Parcel
+
+Each parcel is extruded in 3D — **taller buildings represent higher assessed values**. Parcels are coloured by neighbourhood. Hover over any parcel to see its address, assessed value, and how it compares to the neighbourhood median. Use the **layer toggle** (bottom left) to switch between the parcel-level 3D view and a neighbourhood-level choropleth of total assessed value.
 
 ```{r}
 #| label: map-3d
@@ -623,113 +633,101 @@ ggsave("exports/assessment-change-median.png", p_a,
        width = 10, height = 10, dpi = 150, bg = "white")
 ```
 
-### Assessment Volatility
+### Assessment Change by Parcel
 
-Interquartile range (IQR) of percentage change within each neighbourhood. Higher IQR indicates greater spread — some parcels saw large increases while others stayed flat.
-
-#### Interactive Map
+Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. Colour encodes neighbourhood. Hover to see the address, current value, proposed value, and percentage change.
 
 ```{r}
-#| label: map-b-mapgl
+#| label: map-change-3d
 
-iqr_vals <- change_neighbourhood_sf$iqr_pct[!is.na(change_neighbourhood_sf$iqr_pct)]
-q_breaks_b <- unique(as.numeric(quantile(iqr_vals, probs = c(0, 0.25, 0.5, 0.75, 1.0))))
-if (length(q_breaks_b) < 2) {
-  q_breaks_b <- c(min(iqr_vals), max(iqr_vals))
-}
-iqr_colors <- c("#fef0d9", "#fdcc8a", "#fc8d59", "#d7301f")[seq_len(length(q_breaks_b))]
-
-maplibre(
-  style = carto_style("dark-matter"),
-  center = c(-97.14, 49.89),
-  zoom = 11,
-  pitch = 0,
-  bearing = 0,
-  projection = "mercator"
-) |>
-  add_navigation_control(position = "top-right") |>
-  add_fill_layer(
-    id = "iqr-change",
-    source = change_neighbourhood_sf,
-    fill_color = interpolate(
-      column = "iqr_pct",
-      values = q_breaks_b,
-      stops = iqr_colors
-    ),
-    fill_opacity = 0.85,
-    tooltip = concat(
-      "<strong>", get_column("neighbourhood_area"), "</strong><br>",
-      "IQR of Change: ", get_column("iqr_pct_fmt"), "<br>",
-      "Q25: ", get_column("q25_pct"), "% \u2013 Q75: ", get_column("q75_pct"), "%<br>",
-      "Median Change: ", get_column("median_pct_fmt"), "<br>",
-      "Parcels: ", get_column("change_parcel_count")
-    ),
-    hover_options = list(
-      fill_color = "#ffffff",
-      fill_opacity = 1
-    )
+if (use_local_data) {
+  m_change <- maplibre(
+    style = carto_style("dark-matter"),
+    center = c(-97.14, 49.89),
+    zoom = 11,
+    pitch = 45,
+    bearing = -15,
+    projection = "mercator"
   ) |>
-  add_line_layer(
-    id = "neighbourhood-borders-b",
-    source = change_neighbourhood_sf,
-    line_color = "#ffffff",
-    line_width = 0.5,
-    line_opacity = 0.3
-  )
-```
+    add_navigation_control(position = "top-right") |>
+    add_geocoder_control(
+      position = "top-left",
+      placeholder = "Search for an address..."
+    ) |>
+    add_fill_extrusion_layer(
+      id = "wpg-change-3d",
+      source = parcels_sf,
+      fill_extrusion_height = interpolate(
+        column = "pct_change",
+        values = c(0, 5, 10, 20, 50, 100),
+        stops  = c(0, 30, 100, 300, 800, 2000)
+      ),
+      fill_extrusion_color = match_expr(
+        column = "neighbourhood_area",
+        values = neighbourhood_names,
+        stops = neighbourhood_colors,
+        default = "#95a5a6"
+      ),
+      fill_extrusion_opacity = 0.8,
+      tooltip = concat(
+        "<strong>", get_column("full_address"), "</strong><br>",
+        "Change: ", get_column("pct_change_fmt"), "<br>",
+        "Current (2026): ", get_column("Total_Value_Fmt"), "<br>",
+        "Neighbourhood: ", get_column("neighbourhood_area"), "<br>",
+        "Roll No: ", get_column("roll_number")
+      ),
+      hover_options = list(
+        fill_extrusion_color = "#ffffff"
+      )
+    )
+} else {
+  m_change <- maplibre(
+    style = carto_style("dark-matter"),
+    center = c(-97.14, 49.89),
+    zoom = 11,
+    pitch = 45,
+    bearing = -15,
+    projection = "mercator"
+  ) |>
+    add_navigation_control(position = "top-right") |>
+    add_geocoder_control(
+      position = "top-left",
+      placeholder = "Search for an address..."
+    ) |>
+    add_pmtiles_source(
+      id = "wpg-change-source",
+      url = pmtiles_url
+    ) |>
+    add_fill_extrusion_layer(
+      id = "wpg-change-3d",
+      source = "wpg-change-source",
+      source_layer = layer_name,
+      fill_extrusion_height = interpolate(
+        column = "pct_change",
+        values = c(0, 5, 10, 20, 50, 100),
+        stops  = c(0, 30, 100, 300, 800, 2000)
+      ),
+      fill_extrusion_color = match_expr(
+        column = "neighbourhood_area",
+        values = neighbourhood_names,
+        stops = neighbourhood_colors,
+        default = "#95a5a6"
+      ),
+      fill_extrusion_opacity = 0.8,
+      tooltip = concat(
+        "<strong>", get_column("full_address"), "</strong><br>",
+        "Change: ", get_column("pct_change_fmt"), "<br>",
+        "Current (2026): ", get_column("Total_Value_Fmt"), "<br>",
+        "Neighbourhood: ", get_column("neighbourhood_area"), "<br>",
+        "Roll No: ", get_column("roll_number")
+      ),
+      hover_options = list(
+        fill_extrusion_color = "#ffffff"
+      )
+    )
+}
 
-#### Static Map (for export)
-
-```{r}
-#| label: map-b-ggplot
-#| fig-width: 10
-#| fig-height: 10
-#| dpi: 150
-
-p_b <- ggplot(change_neighbourhood_sf) +
-  geom_sf(aes(fill = iqr_pct), color = "grey30", linewidth = 0.15) +
-  scico::scale_fill_scico(
-    palette = "lajolla",
-    direction = 1,
-    name = "IQR of % Change",
-    labels = function(x) paste0(round(x, 0), "%")
-  ) +
-  annotation_scale(
-    location = "bl",
-    width_hint = 0.25,
-    style = "ticks",
-    text_col = "grey30",
-    line_col = "grey30"
-  ) +
-  annotation_north_arrow(
-    location = "tr",
-    which_north = "true",
-    height = unit(1, "cm"),
-    width = unit(1, "cm"),
-    style = north_arrow_minimal(text_col = "grey30", line_col = "grey30")
-  ) +
-  labs(
-    title = "Assessment Volatility by Neighbourhood",
-    subtitle = glue("IQR of % change in assessed value (2026 \u2192 2027 proposed)\nHigher IQR = greater spread within neighbourhood"),
-    caption = glue("Source: City of Winnipeg Open Data \u2022 Downloaded {file_date}")
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.title = element_text(face = "bold", size = 16),
-    plot.subtitle = element_text(size = 11, color = "grey40"),
-    plot.caption = element_text(size = 8, color = "grey50"),
-    legend.position = "bottom",
-    legend.key.width = unit(2.5, "cm"),
-    legend.key.height = unit(0.4, "cm")
-  )
-
-p_b
-
-ggsave("exports/assessment-volatility-iqr.png", p_b,
-       width = 10, height = 10, dpi = 150, bg = "white")
+m_change
 ```
 
 ### Top & Bottom Neighbourhoods by Median Assessment Change
