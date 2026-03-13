@@ -40,7 +40,7 @@ library(scales)
 library(readr)
 library(stringr)
 
-layer_name <- "wpg-parcels"
+layer_name <- "parcels"
 pmtiles_file <- "data/assessment-parcels.pmtiles"
 
 # Set to TRUE to use local data embedded in the HTML (works offline, larger file).
