@@ -528,14 +528,14 @@ reactable(
       defaultSortOrder = "desc"
     ),
     total_value  = colDef(
-      name = "Total Assessed Value",
+      name = "Total Assessment",
       format = colFormat(prefix = "$", separators = TRUE, digits = 0),
       defaultSortOrder = "desc",
-      minWidth = 170
+      minWidth = 145
     ),
     median_value = dollar_col("Median"),
     mean_value   = dollar_col("Mean"),
-    max_value    = dollar_col("Max")
+    max_value    = colDef(name = "Max", format = colFormat(prefix = "$", separators = TRUE, digits = 0), defaultSortOrder = "desc", minWidth = 110)
   )
 )
 ```
@@ -592,7 +592,7 @@ This section compares Winnipeg's **current (`r asmt_year`)** property assessment
 
 ### Where Assessments Jumped Most
 
-Median percentage change in assessed value by neighbourhood. The diverging scale is centred on the citywide median (`r round(citywide_median_change, 1)`%).
+Median percentage change in assessed value by neighbourhood. The diverging scale is centred on the citywide median (`r round(citywide_median_change, 1)`%). Neighbourhoods that show a median change of -100% are likely based on incomplete data — typically areas with very few parcels where most have a proposed assessment of $0.
 
 #### Interactive Map
 
