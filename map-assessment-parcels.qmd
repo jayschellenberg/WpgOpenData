@@ -734,8 +734,8 @@ if (use_local_data) {
       source = parcels_sf,
       fill_extrusion_height = interpolate(
         column = "pct_change_clamped",
-        values = c(0, 5, 10, 20, 50, 100),
-        stops  = c(0, 30, 100, 300, 800, 2000)
+        values = c(0, 10, 25, 50, 75, 100),
+        stops  = c(0, 80, 250, 500, 750, 1000)
       ),
       fill_extrusion_color = match_expr(
         column = "use_category",
@@ -780,8 +780,8 @@ if (use_local_data) {
       source_layer = layer_name,
       fill_extrusion_height = interpolate(
         column = "pct_change_clamped",
-        values = c(0, 5, 10, 20, 50, 100),
-        stops  = c(0, 30, 100, 300, 800, 2000)
+        values = c(0, 10, 25, 50, 75, 100),
+        stops  = c(0, 80, 250, 500, 750, 1000)
       ),
       fill_extrusion_color = match_expr(
         column = "use_category",
@@ -827,7 +827,7 @@ m_change <- m_change |>
 m_change
 ```
 
-### Assessment Change by Property Use
+### Total Assessment and Change by Property Use
 
 Median percentage change broken down by the 50 most common property use codes. Click any column header to sort. This highlights how different property types are affected by the reassessment.
 
@@ -895,19 +895,21 @@ reactable(
     total_assessed = colDef(
       name = "Total Assessed",
       format = colFormat(prefix = "$", separators = TRUE, digits = 0),
-      defaultSortOrder = "desc"
+      defaultSortOrder = "desc",
+      minWidth = 155
     ),
     median_pct = colDef(
       name = "Median %",
       format = colFormat(suffix = "%", digits = 1),
       defaultSortOrder = "desc",
+      minWidth = 95,
       style = function(value) {
         list(background = median_change_pal(value), fontWeight = "bold")
       }
     ),
     mean_pct = pct_col_def("Mean %"),
-    q25_pct  = pct_col_def("Q25 %"),
-    q75_pct  = pct_col_def("Q75 %")
+    q25_pct  = colDef(name = "Q25 %", format = colFormat(suffix = "%", digits = 1), defaultSortOrder = "desc", maxWidth = 80),
+    q75_pct  = colDef(name = "Q75 %", format = colFormat(suffix = "%", digits = 1), defaultSortOrder = "desc", maxWidth = 80)
   )
 )
 ```
