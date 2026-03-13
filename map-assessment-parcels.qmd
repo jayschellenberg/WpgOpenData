@@ -143,15 +143,19 @@ parcels_sf <- parcels_sf |>
     ),
     Total_Value_Fmt = dollar(total_assessed_value, accuracy = 1),
     # Compute per-parcel % change for the 3D change map
+    # Exclude outliers: proposed = $0 (demolitions/exemptions) and current = $1 (placeholder values)
     pct_change = if_else(
-      !is.na(total_assessed_value) & !is.na(total_proposed_assessment_value) & total_assessed_value > 0,
+      !is.na(total_assessed_value) & !is.na(total_proposed_assessment_value) &
+        total_assessed_value > 1 & total_proposed_assessment_value > 0,
       (total_proposed_assessment_value - total_assessed_value) / total_assessed_value * 100,
       NA_real_
     ),
-    pct_change_fmt = if_else(is.na(pct_change), "N/A", paste0(round(pct_change, 1), "%"))
+    pct_change_fmt = if_else(is.na(pct_change), "N/A", paste0(round(pct_change, 1), "%")),
+    # Clamped version for 3D extrusion height (cap at 100% to avoid extreme spikes)
+    pct_change_clamped = pmin(pmax(pct_change, 0), 100)
   ) |>
   select(roll_number, total_assessed_value, Total_Value_Fmt,
-         total_proposed_assessment_value, pct_change, pct_change_fmt,
+         total_proposed_assessment_value, pct_change, pct_change_clamped, pct_change_fmt,
          Neighbourhood_Median, Neighbourhood_Median_Fmt,
          full_address, neighbourhood_area,
          property_use_code, building_type, year_built,
@@ -520,6 +524,8 @@ cli_alert_info("Citywide median change: {round(citywide_median_change, 1)}%")
 
 This section compares Winnipeg's **current (`r asmt_year`)** property assessments to the **proposed (2027)** values across `r format(n_change_parcels, big.mark = ",")` parcels. The citywide median assessment change is **`r round(citywide_median_change, 1)`%**.
 
+**Note on data quality:** The dataset contains approximately 8,800 parcels where the proposed 2027 assessment is \$0, producing a -100% change. These are likely demolitions, tax exemptions, or parcels being re-rolled rather than genuine value declines. Similarly, a small number of parcels have a nominal current assessment of \$1 (placeholder values) with substantial proposed values, producing extreme percentage increases. Both categories are excluded from the parcel-level 3D change map below but remain in the neighbourhood-level median calculations (where they have minimal impact due to the use of medians).
+
 ### Where Assessments Jumped Most
 
 Median percentage change in assessed value by neighbourhood. The diverging scale is centred on the citywide median (`r round(citywide_median_change, 1)`%).
@@ -635,7 +641,7 @@ ggsave("exports/assessment-change-median.png", p_a,
 
 ### Assessment Change by Parcel
 
-Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. Colour encodes neighbourhood. Hover to see the address, current value, proposed value, and percentage change.
+Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. Colour encodes neighbourhood. Hover to see the address, current value, and percentage change. Parcels with a proposed value of \$0 (demolitions or exemptions) and placeholder assessments of \$1 are excluded. Heights are capped at 100% change to keep the visualization readable.
 
 ```{r}
 #| label: map-change-3d
@@ -658,7 +664,7 @@ if (use_local_data) {
       id = "wpg-change-3d",
       source = parcels_sf,
       fill_extrusion_height = interpolate(
-        column = "pct_change",
+        column = "pct_change_clamped",
         values = c(0, 5, 10, 20, 50, 100),
         stops  = c(0, 30, 100, 300, 800, 2000)
       ),
@@ -703,7 +709,7 @@ if (use_local_data) {
       source = "wpg-change-source",
       source_layer = layer_name,
       fill_extrusion_height = interpolate(
-        column = "pct_change",
+        column = "pct_change_clamped",
         values = c(0, 5, 10, 20, 50, 100),
         stops  = c(0, 30, 100, 300, 800, 2000)
       ),
