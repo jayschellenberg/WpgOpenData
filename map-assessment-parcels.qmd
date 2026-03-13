@@ -829,7 +829,7 @@ m_change
 
 ### Total Assessment and Change by Property Use
 
-Median percentage change broken down by the 50 most common property use codes. Click any column header to sort. This highlights how different property types are affected by the reassessment.
+The total assessed value of all properties in Winnipeg for `r asmt_year` is **`r scales::dollar(total_assessed, accuracy = 1)`**. Median percentage change broken down by the 50 most common property use codes. Click any column header to sort. This highlights how different property types are affected by the reassessment.
 
 ```{r}
 #| label: change-by-use
@@ -886,7 +886,7 @@ reactable(
   highlight = TRUE,
   compact = TRUE,
   columns = list(
-    property_use_code = colDef(name = "Property Use", minWidth = 250),
+    property_use_code = colDef(name = "Property Use", minWidth = 200),
     parcel_count = colDef(
       name = "Parcels",
       format = colFormat(separators = TRUE),
@@ -907,9 +907,9 @@ reactable(
         list(background = median_change_pal(value), fontWeight = "bold")
       }
     ),
-    mean_pct = pct_col_def("Mean %"),
-    q25_pct  = colDef(name = "Q25 %", format = colFormat(suffix = "%", digits = 1), defaultSortOrder = "desc", maxWidth = 80),
-    q75_pct  = colDef(name = "Q75 %", format = colFormat(suffix = "%", digits = 1), defaultSortOrder = "desc", maxWidth = 80)
+    mean_pct = colDef(show = FALSE),
+    q25_pct  = colDef(name = "Q25", format = colFormat(suffix = "%", digits = 1), defaultSortOrder = "desc", maxWidth = 75),
+    q75_pct  = colDef(name = "Q75", format = colFormat(suffix = "%", digits = 1), defaultSortOrder = "desc", maxWidth = 75)
   )
 )
 ```
