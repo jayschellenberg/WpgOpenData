@@ -481,8 +481,12 @@ m
 
 ## Assessed Value by Neighbourhood (`r asmt_year`)
 
+Click any column header to sort.
+
 ```{r}
 #| label: summary-stats
+
+library(reactable)
 
 summary_table <- parcels_all |>
   group_by(neighbourhood_area) |>
@@ -497,18 +501,37 @@ summary_table <- parcels_all |>
   ) |>
   arrange(desc(total_value))
 
-summary_display <- summary_table |>
-  mutate(
-    total_value = dollar(total_value, accuracy = 1),
-    median_value = dollar(median_value, accuracy = 1),
-    mean_value = dollar(mean_value, accuracy = 1),
-    max_value = dollar(max_value, accuracy = 1)
+dollar_col <- function(header) {
+  colDef(
+    name = header,
+    format = colFormat(prefix = "$", separators = TRUE, digits = 0),
+    defaultSortOrder = "desc"
   )
+}
 
-summary_display |> knitr::kable(
-  col.names = c("Neighbourhood", "Parcels", "Total Assessed Value",
-                "Median", "Mean", "Max"),
-  align = c("l", "r", "r", "r", "r", "r")
+reactable(
+  summary_table,
+  sortable = TRUE,
+  defaultSorted = list(total_value = "desc"),
+  defaultPageSize = 15,
+  showPageSizeOptions = TRUE,
+  pageSizeOptions = c(15, 30, 50, 100),
+  striped = TRUE,
+  highlight = TRUE,
+  compact = TRUE,
+  searchable = TRUE,
+  columns = list(
+    neighbourhood_area = colDef(name = "Neighbourhood", minWidth = 200),
+    count = colDef(
+      name = "Parcels",
+      format = colFormat(separators = TRUE),
+      defaultSortOrder = "desc"
+    ),
+    total_value  = dollar_col("Total Assessed Value"),
+    median_value = dollar_col("Median"),
+    mean_value   = dollar_col("Mean"),
+    max_value    = dollar_col("Max")
+  )
 )
 ```
 
@@ -807,7 +830,6 @@ Median percentage change broken down by the 50 most common property use codes. C
 #| label: change-by-use
 
 library(reactable)
-library(htmltools)
 
 # Filter to same outlier-excluded set used in the 3D map
 change_by_use <- parcels_all |>
@@ -834,13 +856,12 @@ change_by_use <- parcels_all |>
   arrange(desc(median_pct))
 
 # Color scale for median column
-median_range <- range(change_by_use$median_pct, na.rm = TRUE)
-median_pal <- scales::col_numeric(
+median_change_pal <- scales::col_numeric(
   palette = c("#2166ac", "#f7f7f7", "#b2182b"),
-  domain = median_range
+  domain = range(change_by_use$median_pct, na.rm = TRUE)
 )
 
-pct_col <- function(name, header) {
+pct_col_def <- function(header) {
   colDef(
     name = header,
     format = colFormat(suffix = "%", digits = 1),
@@ -848,48 +869,34 @@ pct_col <- function(name, header) {
   )
 }
 
-htmltools::div(
-  htmltools::h4(
-    glue("Assessment Change by Property Use Code"),
-    style = "margin-bottom: 2px;"
-  ),
-  htmltools::p(
-    glue("Top 50 use codes by parcel count — {asmt_year} → 2027 (Proposed)"),
-    style = "color: #666; font-size: 13px; margin-top: 0;"
-  ),
-  reactable(
-    change_by_use,
-    sortable = TRUE,
-    defaultSorted = list(median_pct = "desc"),
-    defaultPageSize = 15,
-    showPageSizeOptions = TRUE,
-    pageSizeOptions = c(15, 30, 50),
-    striped = TRUE,
-    highlight = TRUE,
-    compact = TRUE,
-    columns = list(
-      property_use_code = colDef(name = "Property Use", minWidth = 250),
-      parcel_count = colDef(
-        name = "Parcels",
-        format = colFormat(separators = TRUE),
-        defaultSortOrder = "desc"
-      ),
-      median_pct = colDef(
-        name = "Median %",
-        format = colFormat(suffix = "%", digits = 1),
-        defaultSortOrder = "desc",
-        style = function(value) {
-          list(background = median_pal(value), fontWeight = "bold")
-        }
-      ),
-      mean_pct = pct_col("mean_pct", "Mean %"),
-      q25_pct  = pct_col("q25_pct", "Q25 %"),
-      q75_pct  = pct_col("q75_pct", "Q75 %")
-    )
-  ),
-  htmltools::p(
-    glue("Source: City of Winnipeg Open Data • Downloaded {file_date}"),
-    style = "color: #999; font-size: 11px; margin-top: 6px;"
+reactable(
+  change_by_use,
+  sortable = TRUE,
+  defaultSorted = list(median_pct = "desc"),
+  defaultPageSize = 15,
+  showPageSizeOptions = TRUE,
+  pageSizeOptions = c(15, 30, 50),
+  striped = TRUE,
+  highlight = TRUE,
+  compact = TRUE,
+  columns = list(
+    property_use_code = colDef(name = "Property Use", minWidth = 250),
+    parcel_count = colDef(
+      name = "Parcels",
+      format = colFormat(separators = TRUE),
+      defaultSortOrder = "desc"
+    ),
+    median_pct = colDef(
+      name = "Median %",
+      format = colFormat(suffix = "%", digits = 1),
+      defaultSortOrder = "desc",
+      style = function(value) {
+        list(background = median_change_pal(value), fontWeight = "bold")
+      }
+    ),
+    mean_pct = pct_col_def("Mean %"),
+    q25_pct  = pct_col_def("Q25 %"),
+    q75_pct  = pct_col_def("Q75 %")
   )
 )
 ```
