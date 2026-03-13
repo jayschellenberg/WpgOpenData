@@ -513,21 +513,26 @@ reactable(
   summary_table,
   sortable = TRUE,
   defaultSorted = list(total_value = "desc"),
-  defaultPageSize = 15,
+  defaultPageSize = 25,
   showPageSizeOptions = TRUE,
-  pageSizeOptions = c(15, 30, 50, 100),
+  pageSizeOptions = c(25, 50, 100),
   striped = TRUE,
   highlight = TRUE,
   compact = TRUE,
   searchable = TRUE,
   columns = list(
-    neighbourhood_area = colDef(name = "Neighbourhood", minWidth = 200),
+    neighbourhood_area = colDef(name = "Neighbourhood", minWidth = 170),
     count = colDef(
       name = "Parcels",
       format = colFormat(separators = TRUE),
       defaultSortOrder = "desc"
     ),
-    total_value  = dollar_col("Total Assessed Value"),
+    total_value  = colDef(
+      name = "Total Assessed Value",
+      format = colFormat(prefix = "$", separators = TRUE, digits = 0),
+      defaultSortOrder = "desc",
+      minWidth = 170
+    ),
     median_value = dollar_col("Median"),
     mean_value   = dollar_col("Mean"),
     max_value    = dollar_col("Max")
@@ -845,11 +850,12 @@ change_by_use <- parcels_all |>
   ) |>
   group_by(property_use_code) |>
   summarise(
-    parcel_count = n(),
-    median_pct   = round(median(pct_change, na.rm = TRUE), 1),
-    mean_pct     = round(mean(pct_change, na.rm = TRUE), 1),
-    q25_pct      = round(quantile(pct_change, 0.25, na.rm = TRUE), 1),
-    q75_pct      = round(quantile(pct_change, 0.75, na.rm = TRUE), 1),
+    parcel_count    = n(),
+    total_assessed  = sum(total_assessed_value, na.rm = TRUE),
+    median_pct      = round(median(pct_change, na.rm = TRUE), 1),
+    mean_pct        = round(mean(pct_change, na.rm = TRUE), 1),
+    q25_pct         = round(quantile(pct_change, 0.25, na.rm = TRUE), 1),
+    q75_pct         = round(quantile(pct_change, 0.75, na.rm = TRUE), 1),
     .groups = "drop"
   ) |>
   slice_max(parcel_count, n = 50) |>
@@ -873,9 +879,9 @@ reactable(
   change_by_use,
   sortable = TRUE,
   defaultSorted = list(median_pct = "desc"),
-  defaultPageSize = 15,
+  defaultPageSize = 25,
   showPageSizeOptions = TRUE,
-  pageSizeOptions = c(15, 30, 50),
+  pageSizeOptions = c(25, 50),
   striped = TRUE,
   highlight = TRUE,
   compact = TRUE,
@@ -884,6 +890,11 @@ reactable(
     parcel_count = colDef(
       name = "Parcels",
       format = colFormat(separators = TRUE),
+      defaultSortOrder = "desc"
+    ),
+    total_assessed = colDef(
+      name = "Total Assessed",
+      format = colFormat(prefix = "$", separators = TRUE, digits = 0),
       defaultSortOrder = "desc"
     ),
     median_pct = colDef(
