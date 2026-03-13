@@ -187,3 +187,63 @@ bind_rows(top_15, bottom_15) |>
     row_group.font.weight = "bold"
   )
 ```
+
+---
+
+## Static Map — Where Assessments Jumped Most (ggplot2 — for PNG export)
+
+Removed from the live page. Uses `change_neighbourhood_sf` and `citywide_median_change` from the `compute-change` chunk. Requires `ggplot2`, `scico`, `ggsf`, `glue`.
+
+### Code
+
+```r
+#| label: map-a-ggplot
+#| fig-width: 10
+#| fig-height: 10
+#| dpi: 150
+
+p_a <- ggplot(change_neighbourhood_sf) +
+  geom_sf(aes(fill = median_pct), color = "grey30", linewidth = 0.15) +
+  scico::scale_fill_scico(
+    palette = "vik",
+    midpoint = citywide_median_change,
+    name = "Median % Change",
+    labels = function(x) paste0(round(x, 0), "%")
+  ) +
+  annotation_scale(
+    location = "bl",
+    width_hint = 0.25,
+    style = "ticks",
+    text_col = "grey30",
+    line_col = "grey30"
+  ) +
+  annotation_north_arrow(
+    location = "tr",
+    which_north = "true",
+    height = unit(1, "cm"),
+    width = unit(1, "cm"),
+    style = north_arrow_minimal(text_col = "grey30", line_col = "grey30")
+  ) +
+  labs(
+    title = "Where Assessments Jumped Most",
+    subtitle = glue("Median % change in assessed value by neighbourhood (2026 → 2027 proposed)\nCitywide median: {round(citywide_median_change, 1)}%"),
+    caption = glue("Source: City of Winnipeg Open Data • Downloaded {file_date}")
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text = element_blank(),
+    axis.title = element_blank(),
+    panel.grid = element_blank(),
+    plot.title = element_text(face = "bold", size = 16),
+    plot.subtitle = element_text(size = 11, color = "grey40"),
+    plot.caption = element_text(size = 8, color = "grey50"),
+    legend.position = "bottom",
+    legend.key.width = unit(2.5, "cm"),
+    legend.key.height = unit(0.4, "cm")
+  )
+
+p_a
+
+ggsave("exports/assessment-change-median.png", p_a,
+       width = 10, height = 10, dpi = 150, bg = "white")
+```

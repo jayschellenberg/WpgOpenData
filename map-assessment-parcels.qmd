@@ -1,6 +1,6 @@
 ---
 title: "Winnipeg Assessment Parcels — 3D Value Map"
-author: "Jay Schellenberg"
+author: "Jason M. Schellenberg, P. App, AACI"
 date: today
 date-format: "MMMM D, YYYY"
 format:
@@ -298,7 +298,7 @@ total_vals <- neighbourhood_sf$Total_Assessed[!is.na(neighbourhood_sf$Total_Asse
 q_breaks <- as.numeric(quantile(total_vals, probs = c(0, 0.2, 0.4, 0.6, 0.8, 1.0)))
 
 m <- maplibre(
-  style = carto_style("dark-matter"),
+  style = carto_style("positron"),
   center = c(-97.14, 49.89),
   zoom = 11,
   pitch = 30,
@@ -434,7 +434,7 @@ legend_rows <- paste0(sapply(seq_along(legend_colors), function(i) {
 
 # Combine layer toggle + legend into ONE add_control (mapgl only keeps one custom control)
 combined_control_html <- paste0(
-  '<div style="background:rgba(0,0,0,0.75);padding:10px 12px;border-radius:6px;color:#fff;font-family:sans-serif;font-size:13px;line-height:1.6;">',
+  '<div style="background:rgba(255,255,255,0.85);padding:10px 12px;border-radius:6px;color:#333;font-family:sans-serif;font-size:13px;line-height:1.6;border:1px solid #ccc;">',
   '<div style="font-weight:bold;margin-bottom:4px;">View</div>',
   '<label style="display:block;cursor:pointer;">',
   '<input type="radio" name="map-layer" value="3d" checked style="margin-right:5px;">3D Parcels',
@@ -442,7 +442,7 @@ combined_control_html <- paste0(
   '<label style="display:block;cursor:pointer;">',
   '<input type="radio" name="map-layer" value="neighbourhood" style="margin-right:5px;">Total Value by Neighbourhood',
   '</label>',
-  '<div id="neighbourhood-legend" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.3);font-size:12px;line-height:1.5;">',
+  '<div id="neighbourhood-legend" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
   '<div style="font-weight:bold;margin-bottom:5px;">Total Assessed Value</div>',
   legend_rows,
   '</div>',
@@ -612,7 +612,7 @@ q_breaks_a <- c(break_low,
                 break_high)
 
 maplibre(
-  style = carto_style("dark-matter"),
+  style = carto_style("positron"),
   center = c(-97.14, 49.89),
   zoom = 11,
   pitch = 0,
@@ -643,64 +643,10 @@ maplibre(
   add_line_layer(
     id = "neighbourhood-borders-a",
     source = change_neighbourhood_sf,
-    line_color = "#ffffff",
+    line_color = "#333333",
     line_width = 0.5,
-    line_opacity = 0.3
+    line_opacity = 0.4
   )
-```
-
-#### Static Map (for export)
-
-```{r}
-#| label: map-a-ggplot
-#| fig-width: 10
-#| fig-height: 10
-#| dpi: 150
-
-p_a <- ggplot(change_neighbourhood_sf) +
-  geom_sf(aes(fill = median_pct), color = "grey30", linewidth = 0.15) +
-  scico::scale_fill_scico(
-    palette = "vik",
-    midpoint = citywide_median_change,
-    name = "Median % Change",
-    labels = function(x) paste0(round(x, 0), "%")
-  ) +
-  annotation_scale(
-    location = "bl",
-    width_hint = 0.25,
-    style = "ticks",
-    text_col = "grey30",
-    line_col = "grey30"
-  ) +
-  annotation_north_arrow(
-    location = "tr",
-    which_north = "true",
-    height = unit(1, "cm"),
-    width = unit(1, "cm"),
-    style = north_arrow_minimal(text_col = "grey30", line_col = "grey30")
-  ) +
-  labs(
-    title = "Where Assessments Jumped Most",
-    subtitle = glue("Median % change in assessed value by neighbourhood (2026 \u2192 2027 proposed)\nCitywide median: {round(citywide_median_change, 1)}%"),
-    caption = glue("Source: City of Winnipeg Open Data \u2022 Downloaded {file_date}")
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text = element_blank(),
-    axis.title = element_blank(),
-    panel.grid = element_blank(),
-    plot.title = element_text(face = "bold", size = 16),
-    plot.subtitle = element_text(size = 11, color = "grey40"),
-    plot.caption = element_text(size = 8, color = "grey50"),
-    legend.position = "bottom",
-    legend.key.width = unit(2.5, "cm"),
-    legend.key.height = unit(0.4, "cm")
-  )
-
-p_a
-
-ggsave("exports/assessment-change-median.png", p_a,
-       width = 10, height = 10, dpi = 150, bg = "white")
 ```
 
 ### Assessment Change by Parcel
@@ -717,7 +663,7 @@ use_cat_colors <- unname(use_category_colors)
 
 if (use_local_data) {
   m_change <- maplibre(
-    style = carto_style("dark-matter"),
+    style = carto_style("positron"),
     center = c(-97.14, 49.89),
     zoom = 11,
     pitch = 45,
@@ -758,7 +704,7 @@ if (use_local_data) {
     )
 } else {
   m_change <- maplibre(
-    style = carto_style("dark-matter"),
+    style = carto_style("positron"),
     center = c(-97.14, 49.89),
     zoom = 11,
     pitch = 45,
@@ -815,7 +761,7 @@ use_legend_rows <- paste0(sapply(seq_along(use_cat_names), function(i) {
 }), collapse = "")
 
 use_legend_html <- paste0(
-  '<div style="background:rgba(0,0,0,0.75);padding:10px 12px;border-radius:6px;color:#fff;font-family:sans-serif;font-size:12px;line-height:1.5;">',
+  '<div style="background:rgba(255,255,255,0.85);padding:10px 12px;border-radius:6px;color:#333;font-family:sans-serif;font-size:12px;line-height:1.5;border:1px solid #ccc;">',
   '<div style="font-weight:bold;margin-bottom:5px;">Property Use</div>',
   use_legend_rows,
   '</div>'
@@ -829,7 +775,7 @@ m_change
 
 ### Total Assessment and Change by Property Use
 
-The total assessed value of all properties in Winnipeg for `r asmt_year` is **`r scales::dollar(total_assessed, accuracy = 1)`**. Median percentage change broken down by the 50 most common property use codes. Click any column header to sort. This highlights how different property types are affected by the reassessment.
+The total assessed value of all properties in Winnipeg for `r asmt_year` is **`r scales::dollar(total_assessed, accuracy = 1)`**. Median percentage change excludes outliers. Q25 and Q75 are the 25th and 75th percentiles. Click any column header to sort. This highlights how different property types are affected by the reassessment.
 
 ```{r}
 #| label: change-by-use
@@ -878,7 +824,7 @@ pct_col_def <- function(header) {
 reactable(
   change_by_use,
   sortable = TRUE,
-  defaultSorted = list(median_pct = "desc"),
+  defaultSorted = list(total_assessed = "desc"),
   defaultPageSize = 25,
   showPageSizeOptions = TRUE,
   pageSizeOptions = c(25, 50),
