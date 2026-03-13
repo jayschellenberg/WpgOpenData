@@ -152,13 +152,25 @@ parcels_sf <- parcels_sf |>
     ),
     pct_change_fmt = if_else(is.na(pct_change), "N/A", paste0(round(pct_change, 1), "%")),
     # Clamped version for 3D extrusion height (cap at 100% to avoid extreme spikes)
-    pct_change_clamped = pmin(pmax(pct_change, 0), 100)
+    pct_change_clamped = pmin(pmax(pct_change, 0), 100),
+    # Broad property use category from the prefix of the use code
+    use_category = case_when(
+      str_starts(property_use_code, "RES") ~ "Residential",
+      str_starts(property_use_code, "CN")  ~ "Condo",
+      str_starts(property_use_code, "CM")  ~ "Commercial",
+      str_starts(property_use_code, "IN")  ~ "Industrial",
+      str_starts(property_use_code, "PII") ~ "Institutional",
+      str_starts(property_use_code, "PIR") ~ "Recreational",
+      str_starts(property_use_code, "AGR") ~ "Agricultural",
+      str_starts(property_use_code, "V")   ~ "Vacant",
+      TRUE                                 ~ "Other"
+    )
   ) |>
   select(roll_number, total_assessed_value, Total_Value_Fmt,
          total_proposed_assessment_value, pct_change, pct_change_clamped, pct_change_fmt,
          Neighbourhood_Median, Neighbourhood_Median_Fmt,
          full_address, neighbourhood_area,
-         property_use_code, building_type, year_built,
+         property_use_code, use_category, building_type, year_built,
          total_living_area, dwelling_units)
 
 cli_alert_success("Loaded {format(nrow(parcels_sf), big.mark = ',')} parcels")
@@ -248,6 +260,30 @@ palette <- c(
 # Use top neighbourhoods by parcel count for color coding
 neighbourhood_names <- parcels_df$neighbourhood_area
 neighbourhood_colors <- rep_len(palette, length(neighbourhood_names))
+
+# Property use broad categories and colors for the change map
+use_category_map <- c(
+  "RES" = "Residential",
+  "CN"  = "Condo",
+  "CM"  = "Commercial",
+  "IN"  = "Industrial",
+  "PII" = "Institutional",
+  "PIR" = "Recreational",
+  "AGR" = "Agricultural",
+  "V"   = "Vacant"
+)
+
+use_category_colors <- c(
+  "Residential"  = "#e74c3c",
+  "Condo"        = "#3498db",
+  "Commercial"   = "#f39c12",
+  "Industrial"   = "#9b59b6",
+  "Institutional" = "#1abc9c",
+  "Recreational"  = "#2ecc71",
+  "Agricultural"  = "#8d6e63",
+  "Vacant"       = "#78909c",
+  "Other"        = "#95a5a6"
+)
 ```
 
 ## Assessed Value by Parcel
@@ -641,12 +677,15 @@ ggsave("exports/assessment-change-median.png", p_a,
 
 ### Assessment Change by Parcel
 
-Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. Colour encodes neighbourhood. Hover to see the address, current value, and percentage change.
+Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. **Colour encodes property use category** (residential, condo, commercial, industrial, institutional, recreational, agricultural, vacant). Hover to see the address, current value, and percentage change.
 
 **Outlier filtering applied:** Approximately 8,800 parcels with a proposed 2027 assessment of \$0 are excluded — these represent demolitions, tax exemptions, or parcels being re-rolled and would otherwise all show as -100% change. A small number of parcels with a nominal current assessment of \$1 (placeholder values) are also excluded, as they produce misleadingly extreme percentage increases. For the remaining parcels, extrusion heights are capped at 100% change to keep the visualization readable; the actual percentage is still shown in the tooltip on hover.
 
 ```{r}
 #| label: map-change-3d
+
+use_cat_names  <- names(use_category_colors)
+use_cat_colors <- unname(use_category_colors)
 
 if (use_local_data) {
   m_change <- maplibre(
@@ -671,9 +710,9 @@ if (use_local_data) {
         stops  = c(0, 30, 100, 300, 800, 2000)
       ),
       fill_extrusion_color = match_expr(
-        column = "neighbourhood_area",
-        values = neighbourhood_names,
-        stops = neighbourhood_colors,
+        column = "use_category",
+        values = use_cat_names,
+        stops = use_cat_colors,
         default = "#95a5a6"
       ),
       fill_extrusion_opacity = 0.8,
@@ -681,6 +720,7 @@ if (use_local_data) {
         "<strong>", get_column("full_address"), "</strong><br>",
         "Change: ", get_column("pct_change_fmt"), "<br>",
         "Current (2026): ", get_column("Total_Value_Fmt"), "<br>",
+        "Use: ", get_column("property_use_code"), "<br>",
         "Neighbourhood: ", get_column("neighbourhood_area"), "<br>",
         "Roll No: ", get_column("roll_number")
       ),
@@ -716,9 +756,9 @@ if (use_local_data) {
         stops  = c(0, 30, 100, 300, 800, 2000)
       ),
       fill_extrusion_color = match_expr(
-        column = "neighbourhood_area",
-        values = neighbourhood_names,
-        stops = neighbourhood_colors,
+        column = "use_category",
+        values = use_cat_names,
+        stops = use_cat_colors,
         default = "#95a5a6"
       ),
       fill_extrusion_opacity = 0.8,
@@ -726,6 +766,7 @@ if (use_local_data) {
         "<strong>", get_column("full_address"), "</strong><br>",
         "Change: ", get_column("pct_change_fmt"), "<br>",
         "Current (2026): ", get_column("Total_Value_Fmt"), "<br>",
+        "Use: ", get_column("property_use_code"), "<br>",
         "Neighbourhood: ", get_column("neighbourhood_area"), "<br>",
         "Roll No: ", get_column("roll_number")
       ),
@@ -735,15 +776,38 @@ if (use_local_data) {
     )
 }
 
+# Add legend for use categories
+use_legend_rows <- paste0(sapply(seq_along(use_cat_names), function(i) {
+  paste0(
+    '<div style="display:flex;align-items:center;margin-bottom:3px;">',
+    '<span style="display:inline-block;width:18px;height:12px;background:', use_cat_colors[i],
+    ';border-radius:2px;margin-right:6px;flex-shrink:0;"></span>',
+    '<span>', use_cat_names[i], '</span></div>'
+  )
+}), collapse = "")
+
+use_legend_html <- paste0(
+  '<div style="background:rgba(0,0,0,0.75);padding:10px 12px;border-radius:6px;color:#fff;font-family:sans-serif;font-size:12px;line-height:1.5;">',
+  '<div style="font-weight:bold;margin-bottom:5px;">Property Use</div>',
+  use_legend_rows,
+  '</div>'
+)
+
+m_change <- m_change |>
+  add_control(use_legend_html, position = "bottom-left")
+
 m_change
 ```
 
 ### Assessment Change by Property Use
 
-Median percentage change broken down by the 30 most common property use codes. This highlights how different property types are affected by the reassessment.
+Median percentage change broken down by the 50 most common property use codes. Click any column header to sort. This highlights how different property types are affected by the reassessment.
 
 ```{r}
 #| label: change-by-use
+
+library(reactable)
+library(htmltools)
 
 # Filter to same outlier-excluded set used in the 3D map
 change_by_use <- parcels_all |>
@@ -760,49 +824,73 @@ change_by_use <- parcels_all |>
   group_by(property_use_code) |>
   summarise(
     parcel_count = n(),
-    median_pct   = median(pct_change, na.rm = TRUE),
-    mean_pct     = mean(pct_change, na.rm = TRUE),
-    q25_pct      = quantile(pct_change, 0.25, na.rm = TRUE),
-    q75_pct      = quantile(pct_change, 0.75, na.rm = TRUE),
+    median_pct   = round(median(pct_change, na.rm = TRUE), 1),
+    mean_pct     = round(mean(pct_change, na.rm = TRUE), 1),
+    q25_pct      = round(quantile(pct_change, 0.25, na.rm = TRUE), 1),
+    q75_pct      = round(quantile(pct_change, 0.75, na.rm = TRUE), 1),
     .groups = "drop"
   ) |>
-  slice_max(parcel_count, n = 30) |>
+  slice_max(parcel_count, n = 50) |>
   arrange(desc(median_pct))
 
-change_by_use |>
-  gt() |>
-  tab_header(
-    title = "Assessment Change by Property Use Code",
-    subtitle = glue("Top 30 use codes by parcel count — {asmt_year} → 2027 (Proposed)")
-  ) |>
-  cols_label(
-    property_use_code = "Property Use",
-    parcel_count      = "Parcels",
-    median_pct        = "Median %",
-    mean_pct          = "Mean %",
-    q25_pct           = "Q25 %",
-    q75_pct           = "Q75 %"
-  ) |>
-  fmt_number(
-    columns = c(median_pct, mean_pct, q25_pct, q75_pct),
-    decimals = 1,
-    pattern = "{x}%"
-  ) |>
-  fmt_integer(columns = parcel_count) |>
-  data_color(
-    columns = median_pct,
-    fn = scales::col_numeric(
-      palette = c("#2166ac", "#f7f7f7", "#b2182b"),
-      domain = range(change_by_use$median_pct, na.rm = TRUE)
-    )
-  ) |>
-  tab_source_note(
-    source_note = glue("Source: City of Winnipeg Open Data • Downloaded {file_date}")
-  ) |>
-  tab_options(
-    heading.title.font.size = 16,
-    heading.subtitle.font.size = 12,
-    table.font.size = 11
+# Color scale for median column
+median_range <- range(change_by_use$median_pct, na.rm = TRUE)
+median_pal <- scales::col_numeric(
+  palette = c("#2166ac", "#f7f7f7", "#b2182b"),
+  domain = median_range
+)
+
+pct_col <- function(name, header) {
+  colDef(
+    name = header,
+    format = colFormat(suffix = "%", digits = 1),
+    defaultSortOrder = "desc"
   )
+}
+
+htmltools::div(
+  htmltools::h4(
+    glue("Assessment Change by Property Use Code"),
+    style = "margin-bottom: 2px;"
+  ),
+  htmltools::p(
+    glue("Top 50 use codes by parcel count — {asmt_year} → 2027 (Proposed)"),
+    style = "color: #666; font-size: 13px; margin-top: 0;"
+  ),
+  reactable(
+    change_by_use,
+    sortable = TRUE,
+    defaultSorted = list(median_pct = "desc"),
+    defaultPageSize = 15,
+    showPageSizeOptions = TRUE,
+    pageSizeOptions = c(15, 30, 50),
+    striped = TRUE,
+    highlight = TRUE,
+    compact = TRUE,
+    columns = list(
+      property_use_code = colDef(name = "Property Use", minWidth = 250),
+      parcel_count = colDef(
+        name = "Parcels",
+        format = colFormat(separators = TRUE),
+        defaultSortOrder = "desc"
+      ),
+      median_pct = colDef(
+        name = "Median %",
+        format = colFormat(suffix = "%", digits = 1),
+        defaultSortOrder = "desc",
+        style = function(value) {
+          list(background = median_pal(value), fontWeight = "bold")
+        }
+      ),
+      mean_pct = pct_col("mean_pct", "Mean %"),
+      q25_pct  = pct_col("q25_pct", "Q25 %"),
+      q75_pct  = pct_col("q75_pct", "Q75 %")
+    )
+  ),
+  htmltools::p(
+    glue("Source: City of Winnipeg Open Data • Downloaded {file_date}"),
+    style = "color: #999; font-size: 11px; margin-top: 6px;"
+  )
+)
 ```
 
