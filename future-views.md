@@ -125,3 +125,65 @@ ggsave("exports/assessment-volatility-iqr.png", p_b,
 ### Prerequisites
 
 The `iqr_pct`, `q25_pct`, `q75_pct` columns are already computed in the `compute-change` chunk's `change_by_neighbourhood` summary and joined to `change_neighbourhood_sf`. No additional data loading needed — just paste the map chunks back in after the "Where Assessments Jumped Most" section.
+
+---
+
+## Top & Bottom Neighbourhoods by Median Assessment Change (gt table)
+
+A `gt` table showing the 15 neighbourhoods with the largest and smallest median assessment changes, with conditional colour formatting.
+
+### Prerequisites
+
+Uses `change_by_neighbourhood` (computed in the `compute-change` chunk), `asmt_year`, `citywide_median_change`, and `file_date`. Requires `gt`, `scales`, and `glue` libraries.
+
+### Code
+
+```r
+#| label: gt-table
+
+top_15 <- change_by_neighbourhood |>
+  slice_max(median_pct, n = 15) |>
+  mutate(rank_group = "Largest Increases")
+
+bottom_15 <- change_by_neighbourhood |>
+  slice_min(median_pct, n = 15) |>
+  arrange(median_pct) |>
+  mutate(rank_group = "Smallest Increases")
+
+bind_rows(top_15, bottom_15) |>
+  select(rank_group, neighbourhood_area, median_pct, mean_pct, iqr_pct, change_parcel_count) |>
+  gt(groupname_col = "rank_group") |>
+  tab_header(
+    title = glue("Neighbourhood Assessment Changes — {asmt_year} → 2027 (Proposed)"),
+    subtitle = glue("Citywide median change: {round(citywide_median_change, 1)}%")
+  ) |>
+  cols_label(
+    neighbourhood_area = "Neighbourhood",
+    median_pct = "Median %",
+    mean_pct = "Mean %",
+    iqr_pct = "IQR %",
+    change_parcel_count = "Parcels"
+  ) |>
+  fmt_number(
+    columns = c(median_pct, mean_pct, iqr_pct),
+    decimals = 1,
+    pattern = "{x}%"
+  ) |>
+  fmt_integer(columns = change_parcel_count) |>
+  data_color(
+    columns = median_pct,
+    fn = scales::col_numeric(
+      palette = c("#2166ac", "#f7f7f7", "#b2182b"),
+      domain = range(change_by_neighbourhood$median_pct, na.rm = TRUE)
+    )
+  ) |>
+  tab_source_note(
+    source_note = glue("Source: City of Winnipeg Open Data • Downloaded {file_date}")
+  ) |>
+  tab_options(
+    heading.title.font.size = 16,
+    heading.subtitle.font.size = 12,
+    table.font.size = 11,
+    row_group.font.weight = "bold"
+  )
+```
