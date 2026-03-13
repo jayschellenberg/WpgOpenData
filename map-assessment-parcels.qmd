@@ -855,16 +855,26 @@ This section focuses on residential properties (RESSD, RESSS, RESDU, RESMA, RESR
 #| label: res-data
 #| include: false
 
-res_codes <- c("RESSD", "CNAPT", "RESSS", "CNRES", "RESDU", "RESMA", "RESRH", "RESSU")
+res_code_prefixes <- c("RESSD", "CNAPT", "RESSS", "CNRES", "RESDU", "RESMA", "RESRH", "RESSU")
+
+# Property use codes include descriptions (e.g. "RESSD - DETACHED SINGLE DWELLING")
+# Build a regex pattern to match any of the prefixes at the start
+res_pattern <- paste0("^(", paste(res_code_prefixes, collapse = "|"), ")")
 
 res_sf <- parcels_sf |>
   filter(
-    property_use_code %in% res_codes,
+    str_detect(property_use_code, res_pattern),
     !is.na(year_built), year_built > 0,
     !is.na(total_living_area), total_living_area > 0
+  ) |>
+  mutate(
+    res_use_code = str_extract(property_use_code, "^[A-Z]+")
   )
 
 cli_alert_info("Residential parcels with year built & living area: {nrow(res_sf)}")
+
+# Get the actual full property_use_code values for PMTiles filter
+res_full_codes <- unique(res_sf$property_use_code)
 
 res_colours <- c(
   "RESSD" = "#e74c3c",
@@ -972,6 +982,13 @@ m_res <- m_res |>
 
 # --- 3D Parcel extrusion layer (visible by default) ---
 
+# Build colour mapping for full property_use_code values (e.g. "RESSD - DETACHED SINGLE DWELLING")
+# Map each full code to its prefix colour
+res_full_colour_map <- setNames(
+  res_colours[str_extract(res_full_codes, "^[A-Z]+")],
+  res_full_codes
+)
+
 if (use_local_data) {
   m_res <- m_res |>
     add_fill_extrusion_layer(
@@ -984,8 +1001,8 @@ if (use_local_data) {
       ),
       fill_extrusion_color = match_expr(
         column = "property_use_code",
-        values = names(res_colours),
-        stops  = unname(res_colours),
+        values = names(res_full_colour_map),
+        stops  = unname(res_full_colour_map),
         default = "#95a5a6"
       ),
       fill_extrusion_opacity = 0.8,
@@ -1010,7 +1027,7 @@ if (use_local_data) {
       source = "res-parcels-source",
       source_layer = layer_name,
       filter = list("all",
-        list("in", list("get", "property_use_code"), list("literal", res_codes)),
+        list("in", list("get", "property_use_code"), list("literal", as.list(res_full_codes))),
         list(">", list("get", "year_built"), 0),
         list(">", list("get", "total_living_area"), 0)
       ),
@@ -1021,8 +1038,8 @@ if (use_local_data) {
       ),
       fill_extrusion_color = match_expr(
         column = "property_use_code",
-        values = names(res_colours),
-        stops  = unname(res_colours),
+        values = names(res_full_colour_map),
+        stops  = unname(res_full_colour_map),
         default = "#95a5a6"
       ),
       fill_extrusion_opacity = 0.8,
