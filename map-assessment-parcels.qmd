@@ -849,7 +849,7 @@ reactable(
 
 ## Residential Property Characteristics
 
-This section focuses on residential properties (RESSD, RESSS, RESDU, RESMA, RESRH, RESSU, CNAPT, CNRES) where both year built and living area data are available. The default 3D view shows individual parcels — **taller parcels have larger living areas** — coloured by property use code. Use the radio toggle (bottom left) to switch to neighbourhood-level views of median year built or median living area.
+This section focuses on residential properties (RESSD, RESSS, RESDU, RESMA, RESRH, RESSU, CNAPT, CNRES) where both year built and living area data are available. Use the **Metric** toggle to switch between Year Built and Living Area, and the **View** toggle to switch between individual 3D parcels and neighbourhood-level medians. In 3D mode, **height encodes the selected metric** while **colour encodes the other metric** — for example, when viewing Year Built, taller parcels are newer and colour shows living area.
 
 ```{r}
 #| label: res-data
@@ -926,8 +926,33 @@ la_colors <- c("#feebe2", "#fcc5c0", "#fa9fb5", "#f768a1", "#c51b8a", "#7a0177")
 ```{r}
 #| label: res-map
 
-# --- Neighbourhood choropleth layers (hidden by default) ---
+# --- Parcel-level colour scales for year built and living area ---
+# Year built: older = cool/light, newer = warm/dark
+yb_parcel_colors <- c("#ffffcc", "#c7e9b4", "#7fcdbb", "#41b6c4", "#1d91c0", "#225ea8")
+yb_parcel_breaks <- c(1900, 1950, 1970, 1985, 2000, 2015)
 
+# Living area: smaller = light, larger = dark
+la_parcel_colors <- c("#feebe2", "#fcc5c0", "#fa9fb5", "#f768a1", "#c51b8a", "#7a0177")
+la_parcel_breaks <- c(500, 800, 1100, 1500, 2200, 4000)
+
+# Shared tooltip for all 3D layers
+res_tooltip <- concat(
+  "<strong>", get_column("full_address"), "</strong><br>",
+  "Year Built: ", get_column("year_built"), "<br>",
+  "Living Area: ", get_column("total_living_area"), " sq ft<br>",
+  "Use: ", get_column("property_use_code"), "<br>",
+  "Assessed Value: ", get_column("Total_Value_Fmt"), "<br>",
+  "Neighbourhood: ", get_column("neighbourhood_area")
+)
+
+# PMTiles filter for residential codes
+res_pmtiles_filter <- list("all",
+  list("in", list("get", "property_use_code"), list("literal", as.list(res_full_codes))),
+  list(">", list("get", "year_built"), 0),
+  list(">", list("get", "total_living_area"), 0)
+)
+
+# --- Map base ---
 m_res <- maplibre(
   style = carto_style("positron"),
   center = c(-97.14, 49.89),
@@ -938,10 +963,12 @@ m_res <- maplibre(
 ) |>
   add_navigation_control(position = "top-right")
 
+# --- Neighbourhood choropleth layers (both hidden by default) ---
+
 # Year Built choropleth
 m_res <- m_res |>
   add_fill_layer(
-    id = "res-year-built",
+    id = "res-nb-yearbuilt",
     source = res_neighbourhood_sf,
     fill_color = interpolate(
       column = "Median_Year_Built",
@@ -962,7 +989,7 @@ m_res <- m_res |>
 # Living Area choropleth
 m_res <- m_res |>
   add_fill_layer(
-    id = "res-living-area",
+    id = "res-nb-livingarea",
     source = res_neighbourhood_sf,
     fill_color = interpolate(
       column = "Median_Living_Area",
@@ -980,40 +1007,48 @@ m_res <- m_res |>
     hover_options = list(fill_color = "#ffffff", fill_opacity = 1)
   )
 
-# --- 3D Parcel extrusion layer (visible by default) ---
-
-# Build colour mapping for full property_use_code values (e.g. "RESSD - DETACHED SINGLE DWELLING")
-# Map each full code to its prefix colour
-res_full_colour_map <- setNames(
-  res_colours[str_extract(res_full_codes, "^[A-Z]+")],
-  res_full_codes
-)
+# --- 3D Parcel layers (4 combinations, only one visible at a time) ---
+# Default: height=year_built, colour=living_area
 
 if (use_local_data) {
+  # 3D: height=year_built, colour=living_area (DEFAULT - visible)
   m_res <- m_res |>
     add_fill_extrusion_layer(
-      id = "res-parcels-3d",
+      id = "res-3d-yb",
       source = res_sf,
+      fill_extrusion_height = interpolate(
+        column = "year_built",
+        values = c(1900, 1940, 1960, 1980, 2000, 2025),
+        stops  = c(20, 80, 200, 400, 700, 1000)
+      ),
+      fill_extrusion_color = interpolate(
+        column = "total_living_area",
+        values = la_parcel_breaks,
+        stops  = la_parcel_colors
+      ),
+      fill_extrusion_opacity = 0.8,
+      tooltip = res_tooltip,
+      hover_options = list(fill_extrusion_color = "#ffffff")
+    )
+
+  # 3D: height=living_area, colour=year_built (hidden)
+  m_res <- m_res |>
+    add_fill_extrusion_layer(
+      id = "res-3d-la",
+      source = res_sf,
+      visibility = "none",
       fill_extrusion_height = interpolate(
         column = "total_living_area",
         values = c(0, 500, 1000, 2000, 4000),
         stops  = c(0, 50, 150, 400, 800)
       ),
-      fill_extrusion_color = match_expr(
-        column = "property_use_code",
-        values = names(res_full_colour_map),
-        stops  = unname(res_full_colour_map),
-        default = "#95a5a6"
+      fill_extrusion_color = interpolate(
+        column = "year_built",
+        values = yb_parcel_breaks,
+        stops  = yb_parcel_colors
       ),
       fill_extrusion_opacity = 0.8,
-      tooltip = concat(
-        "<strong>", get_column("full_address"), "</strong><br>",
-        "Year Built: ", get_column("year_built"), "<br>",
-        "Living Area: ", get_column("total_living_area"), " sq ft<br>",
-        "Use: ", get_column("property_use_code"), "<br>",
-        "Assessed Value: ", get_column("Total_Value_Fmt"), "<br>",
-        "Neighbourhood: ", get_column("neighbourhood_area")
-      ),
+      tooltip = res_tooltip,
       hover_options = list(fill_extrusion_color = "#ffffff")
     )
 } else {
@@ -1021,61 +1056,101 @@ if (use_local_data) {
     add_pmtiles_source(
       id = "res-parcels-source",
       url = pmtiles_url
-    ) |>
+    )
+
+  # 3D: height=year_built, colour=living_area (DEFAULT - visible)
+  m_res <- m_res |>
     add_fill_extrusion_layer(
-      id = "res-parcels-3d",
+      id = "res-3d-yb",
       source = "res-parcels-source",
       source_layer = layer_name,
-      filter = list("all",
-        list("in", list("get", "property_use_code"), list("literal", as.list(res_full_codes))),
-        list(">", list("get", "year_built"), 0),
-        list(">", list("get", "total_living_area"), 0)
+      filter = res_pmtiles_filter,
+      fill_extrusion_height = interpolate(
+        column = "year_built",
+        values = c(1900, 1940, 1960, 1980, 2000, 2025),
+        stops  = c(20, 80, 200, 400, 700, 1000)
       ),
+      fill_extrusion_color = interpolate(
+        column = "total_living_area",
+        values = la_parcel_breaks,
+        stops  = la_parcel_colors
+      ),
+      fill_extrusion_opacity = 0.8,
+      tooltip = res_tooltip,
+      hover_options = list(fill_extrusion_color = "#ffffff")
+    )
+
+  # 3D: height=living_area, colour=year_built (hidden)
+  m_res <- m_res |>
+    add_fill_extrusion_layer(
+      id = "res-3d-la",
+      source = "res-parcels-source",
+      source_layer = layer_name,
+      filter = res_pmtiles_filter,
+      visibility = "none",
       fill_extrusion_height = interpolate(
         column = "total_living_area",
         values = c(0, 500, 1000, 2000, 4000),
         stops  = c(0, 50, 150, 400, 800)
       ),
-      fill_extrusion_color = match_expr(
-        column = "property_use_code",
-        values = names(res_full_colour_map),
-        stops  = unname(res_full_colour_map),
-        default = "#95a5a6"
+      fill_extrusion_color = interpolate(
+        column = "year_built",
+        values = yb_parcel_breaks,
+        stops  = yb_parcel_colors
       ),
       fill_extrusion_opacity = 0.8,
-      tooltip = concat(
-        "<strong>", get_column("full_address"), "</strong><br>",
-        "Year Built: ", get_column("year_built"), "<br>",
-        "Living Area: ", get_column("total_living_area"), " sq ft<br>",
-        "Use: ", get_column("property_use_code"), "<br>",
-        "Assessed Value: ", get_column("Total_Value_Fmt"), "<br>",
-        "Neighbourhood: ", get_column("neighbourhood_area")
-      ),
+      tooltip = res_tooltip,
       hover_options = list(fill_extrusion_color = "#ffffff")
     )
 }
 
 # --- Legends ---
 
-# Parcel legend (property use codes)
-res_parcel_legend_rows <- paste0(sapply(seq_along(res_colours), function(i) {
-  paste0(
-    '<div style="display:flex;align-items:center;margin-bottom:3px;">',
-    '<span style="display:inline-block;width:18px;height:12px;background:', res_colours[i],
-    ';border-radius:2px;margin-right:6px;flex-shrink:0;"></span>',
-    '<span>', names(res_colours)[i], '</span></div>'
-  )
-}), collapse = "")
-
-# Year built legend
-yb_legend_labels <- as.character(round(yb_breaks))
-yb_legend_rows <- paste0(sapply(seq_along(yb_colors), function(i) {
+# Year built colour legend (used when colour = year built)
+yb_legend_labels <- as.character(yb_parcel_breaks)
+yb_legend_rows <- paste0(sapply(seq_along(yb_parcel_colors), function(i) {
   label <- if (i == 1) {
     paste0("&lt; ", yb_legend_labels[i + 1])
-  } else if (i == length(yb_colors)) {
+  } else if (i == length(yb_parcel_colors)) {
     paste0("&ge; ", yb_legend_labels[i])
   } else {
     paste0(yb_legend_labels[i], " \u2013 ", yb_legend_labels[i + 1])
+  }
+  paste0(
+    '<div style="display:flex;align-items:center;margin-bottom:3px;">',
+    '<span style="display:inline-block;width:18px;height:12px;background:', yb_parcel_colors[i],
+    ';border-radius:2px;margin-right:6px;flex-shrink:0;"></span>',
+    '<span>', label, '</span></div>'
+  )
+}), collapse = "")
+
+# Living area colour legend (used when colour = living area)
+la_legend_labels <- format(la_parcel_breaks, big.mark = ",")
+la_legend_rows <- paste0(sapply(seq_along(la_parcel_colors), function(i) {
+  label <- if (i == 1) {
+    paste0("&lt; ", la_legend_labels[i + 1], " sq ft")
+  } else if (i == length(la_parcel_colors)) {
+    paste0("&ge; ", la_legend_labels[i], " sq ft")
+  } else {
+    paste0(la_legend_labels[i], " \u2013 ", la_legend_labels[i + 1], " sq ft")
+  }
+  paste0(
+    '<div style="display:flex;align-items:center;margin-bottom:3px;">',
+    '<span style="display:inline-block;width:18px;height:12px;background:', la_parcel_colors[i],
+    ';border-radius:2px;margin-right:6px;flex-shrink:0;"></span>',
+    '<span>', label, '</span></div>'
+  )
+}), collapse = "")
+
+# Neighbourhood year built legend (quantile-based)
+nb_yb_legend_labels <- as.character(round(yb_breaks))
+nb_yb_legend_rows <- paste0(sapply(seq_along(yb_colors), function(i) {
+  label <- if (i == 1) {
+    paste0("&lt; ", nb_yb_legend_labels[i + 1])
+  } else if (i == length(yb_colors)) {
+    paste0("&ge; ", nb_yb_legend_labels[i])
+  } else {
+    paste0(nb_yb_legend_labels[i], " \u2013 ", nb_yb_legend_labels[i + 1])
   }
   paste0(
     '<div style="display:flex;align-items:center;margin-bottom:3px;">',
@@ -1085,15 +1160,15 @@ yb_legend_rows <- paste0(sapply(seq_along(yb_colors), function(i) {
   )
 }), collapse = "")
 
-# Living area legend
-la_legend_labels <- format(round(la_breaks), big.mark = ",")
-la_legend_rows <- paste0(sapply(seq_along(la_colors), function(i) {
+# Neighbourhood living area legend (quantile-based)
+nb_la_legend_labels <- format(round(la_breaks), big.mark = ",")
+nb_la_legend_rows <- paste0(sapply(seq_along(la_colors), function(i) {
   label <- if (i == 1) {
-    paste0("&lt; ", la_legend_labels[i + 1], " sq ft")
+    paste0("&lt; ", nb_la_legend_labels[i + 1], " sq ft")
   } else if (i == length(la_colors)) {
-    paste0("&ge; ", la_legend_labels[i], " sq ft")
+    paste0("&ge; ", nb_la_legend_labels[i], " sq ft")
   } else {
-    paste0(la_legend_labels[i], " \u2013 ", la_legend_labels[i + 1], " sq ft")
+    paste0(nb_la_legend_labels[i], " \u2013 ", nb_la_legend_labels[i + 1], " sq ft")
   }
   paste0(
     '<div style="display:flex;align-items:center;margin-bottom:3px;">',
@@ -1103,31 +1178,54 @@ la_legend_rows <- paste0(sapply(seq_along(la_colors), function(i) {
   )
 }), collapse = "")
 
-# Combined control with radio buttons and all three legends
+# Combined control with two radio groups
 res_control_html <- paste0(
   '<div style="background:rgba(255,255,255,0.85);padding:10px 12px;border-radius:6px;color:#333;font-family:sans-serif;font-size:13px;line-height:1.6;border:1px solid #ccc;">',
-  '<div style="font-weight:bold;margin-bottom:4px;">View</div>',
+
+  '<div style="font-weight:bold;margin-bottom:4px;">Metric</div>',
   '<label style="display:block;cursor:pointer;">',
-  '<input type="radio" name="res-map-layer" value="3d" checked style="margin-right:5px;">3D Parcels',
+  '<input type="radio" name="res-metric" value="year-built" checked style="margin-right:5px;">Year Built',
   '</label>',
   '<label style="display:block;cursor:pointer;">',
-  '<input type="radio" name="res-map-layer" value="year-built" style="margin-right:5px;">Median Year Built',
+  '<input type="radio" name="res-metric" value="living-area" style="margin-right:5px;">Living Area',
+  '</label>',
+
+  '<div style="font-weight:bold;margin-top:8px;margin-bottom:4px;">View</div>',
+  '<label style="display:block;cursor:pointer;">',
+  '<input type="radio" name="res-view" value="3d" checked style="margin-right:5px;">3D Parcels',
   '</label>',
   '<label style="display:block;cursor:pointer;">',
-  '<input type="radio" name="res-map-layer" value="living-area" style="margin-right:5px;">Median Living Area',
+  '<input type="radio" name="res-view" value="neighbourhood" style="margin-right:5px;">Neighbourhood',
   '</label>',
-  '<div id="res-legend-parcels" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
-  '<div style="font-weight:bold;margin-bottom:5px;">Property Use Code</div>',
-  res_parcel_legend_rows,
-  '</div>',
-  '<div id="res-legend-year-built" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
-  '<div style="font-weight:bold;margin-bottom:5px;">Median Year Built</div>',
-  yb_legend_rows,
-  '</div>',
-  '<div id="res-legend-living-area" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
-  '<div style="font-weight:bold;margin-bottom:5px;">Median Living Area</div>',
+
+  # Legend: 3D year-built (height=year, colour=living area) -- DEFAULT visible
+  '<div id="res-leg-3d-yb" style="margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
+  '<div style="font-weight:bold;margin-bottom:3px;">Height: Year Built</div>',
+  '<div style="margin-bottom:5px;font-size:11px;color:#666;">Taller = newer</div>',
+  '<div style="font-weight:bold;margin-bottom:3px;">Colour: Living Area</div>',
   la_legend_rows,
   '</div>',
+
+  # Legend: 3D living-area (height=area, colour=year built)
+  '<div id="res-leg-3d-la" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
+  '<div style="font-weight:bold;margin-bottom:3px;">Height: Living Area</div>',
+  '<div style="margin-bottom:5px;font-size:11px;color:#666;">Taller = larger</div>',
+  '<div style="font-weight:bold;margin-bottom:3px;">Colour: Year Built</div>',
+  yb_legend_rows,
+  '</div>',
+
+  # Legend: Neighbourhood year built
+  '<div id="res-leg-nb-yb" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
+  '<div style="font-weight:bold;margin-bottom:5px;">Median Year Built</div>',
+  nb_yb_legend_rows,
+  '</div>',
+
+  # Legend: Neighbourhood living area
+  '<div id="res-leg-nb-la" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid rgba(0,0,0,0.2);font-size:12px;line-height:1.5;">',
+  '<div style="font-weight:bold;margin-bottom:5px;">Median Living Area</div>',
+  nb_la_legend_rows,
+  '</div>',
+
   '</div>'
 )
 
@@ -1139,29 +1237,46 @@ m_res <- m_res |>
         if (!el.map || !el.map.isStyleLoaded()) return;
         clearInterval(poll);
         var map = el.map;
-        var legendParcels    = document.getElementById('res-legend-parcels');
-        var legendYearBuilt  = document.getElementById('res-legend-year-built');
-        var legendLivingArea = document.getElementById('res-legend-living-area');
-        var radios = el.querySelectorAll('input[name=\"res-map-layer\"]');
-        var layers = {
-          '3d':          { show: 'res-parcels-3d',  legend: legendParcels },
-          'year-built':  { show: 'res-year-built',  legend: legendYearBuilt },
-          'living-area': { show: 'res-living-area', legend: legendLivingArea }
+
+        var layerMap = {
+          '3d-year-built':            'res-3d-yb',
+          '3d-living-area':           'res-3d-la',
+          'neighbourhood-year-built': 'res-nb-yearbuilt',
+          'neighbourhood-living-area':'res-nb-livingarea'
         };
-        var allLayerIds = ['res-parcels-3d', 'res-year-built', 'res-living-area'];
-        var allLegends  = [legendParcels, legendYearBuilt, legendLivingArea];
-        radios.forEach(function(radio) {
-          radio.addEventListener('change', function() {
-            var selected = layers[this.value];
-            allLayerIds.forEach(function(id) {
-              map.setLayoutProperty(id, 'visibility', 'none');
-            });
-            allLegends.forEach(function(lg) {
-              if (lg) lg.style.display = 'none';
-            });
-            map.setLayoutProperty(selected.show, 'visibility', 'visible');
-            if (selected.legend) selected.legend.style.display = 'block';
+        var legendMap = {
+          '3d-year-built':            document.getElementById('res-leg-3d-yb'),
+          '3d-living-area':           document.getElementById('res-leg-3d-la'),
+          'neighbourhood-year-built': document.getElementById('res-leg-nb-yb'),
+          'neighbourhood-living-area':document.getElementById('res-leg-nb-la')
+        };
+
+        var allLayerIds = Object.values(layerMap);
+        var allLegends  = Object.values(legendMap);
+
+        function updateMap() {
+          var metric = el.querySelector('input[name=\"res-metric\"]:checked').value;
+          var view   = el.querySelector('input[name=\"res-view\"]:checked').value;
+          var key    = view + '-' + metric;
+
+          allLayerIds.forEach(function(id) {
+            map.setLayoutProperty(id, 'visibility', 'none');
           });
+          allLegends.forEach(function(lg) {
+            if (lg) lg.style.display = 'none';
+          });
+
+          var activeLayer = layerMap[key];
+          var activeLegend = legendMap[key];
+          if (activeLayer) map.setLayoutProperty(activeLayer, 'visibility', 'visible');
+          if (activeLegend) activeLegend.style.display = 'block';
+        }
+
+        el.querySelectorAll('input[name=\"res-metric\"]').forEach(function(r) {
+          r.addEventListener('change', updateMap);
+        });
+        el.querySelectorAll('input[name=\"res-view\"]').forEach(function(r) {
+          r.addEventListener('change', updateMap);
         });
       }, 200);
     }
