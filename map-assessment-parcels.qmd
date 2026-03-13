@@ -641,7 +641,9 @@ ggsave("exports/assessment-change-median.png", p_a,
 
 ### Assessment Change by Parcel
 
-Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. Colour encodes neighbourhood. Hover to see the address, current value, and percentage change. Parcels with a proposed value of \$0 (demolitions or exemptions) and placeholder assessments of \$1 are excluded. Heights are capped at 100% change to keep the visualization readable.
+Each parcel is extruded in 3D — **taller parcels had larger percentage increases** in assessed value from `r asmt_year` to the proposed 2027 roll. Colour encodes neighbourhood. Hover to see the address, current value, and percentage change.
+
+**Outlier filtering applied:** Approximately 8,800 parcels with a proposed 2027 assessment of \$0 are excluded — these represent demolitions, tax exemptions, or parcels being re-rolled and would otherwise all show as -100% change. A small number of parcels with a nominal current assessment of \$1 (placeholder values) are also excluded, as they produce misleadingly extreme percentage increases. For the remaining parcels, extrusion heights are capped at 100% change to keep the visualization readable; the actual percentage is still shown in the tooltip on hover.
 
 ```{r}
 #| label: map-change-3d
@@ -734,5 +736,73 @@ if (use_local_data) {
 }
 
 m_change
+```
+
+### Assessment Change by Property Use
+
+Median percentage change broken down by the 30 most common property use codes. This highlights how different property types are affected by the reassessment.
+
+```{r}
+#| label: change-by-use
+
+# Filter to same outlier-excluded set used in the 3D map
+change_by_use <- parcels_all |>
+  filter(
+    !is.na(total_assessed_value),
+    !is.na(total_proposed_assessment_value),
+    total_assessed_value > 1,
+    total_proposed_assessment_value > 0
+  ) |>
+  mutate(
+    pct_change = (total_proposed_assessment_value - total_assessed_value) /
+                  total_assessed_value * 100
+  ) |>
+  group_by(property_use_code) |>
+  summarise(
+    parcel_count = n(),
+    median_pct   = median(pct_change, na.rm = TRUE),
+    mean_pct     = mean(pct_change, na.rm = TRUE),
+    q25_pct      = quantile(pct_change, 0.25, na.rm = TRUE),
+    q75_pct      = quantile(pct_change, 0.75, na.rm = TRUE),
+    .groups = "drop"
+  ) |>
+  slice_max(parcel_count, n = 30) |>
+  arrange(desc(median_pct))
+
+change_by_use |>
+  gt() |>
+  tab_header(
+    title = "Assessment Change by Property Use Code",
+    subtitle = glue("Top 30 use codes by parcel count — {asmt_year} → 2027 (Proposed)")
+  ) |>
+  cols_label(
+    property_use_code = "Property Use",
+    parcel_count      = "Parcels",
+    median_pct        = "Median %",
+    mean_pct          = "Mean %",
+    q25_pct           = "Q25 %",
+    q75_pct           = "Q75 %"
+  ) |>
+  fmt_number(
+    columns = c(median_pct, mean_pct, q25_pct, q75_pct),
+    decimals = 1,
+    pattern = "{x}%"
+  ) |>
+  fmt_integer(columns = parcel_count) |>
+  data_color(
+    columns = median_pct,
+    fn = scales::col_numeric(
+      palette = c("#2166ac", "#f7f7f7", "#b2182b"),
+      domain = range(change_by_use$median_pct, na.rm = TRUE)
+    )
+  ) |>
+  tab_source_note(
+    source_note = glue("Source: City of Winnipeg Open Data • Downloaded {file_date}")
+  ) |>
+  tab_options(
+    heading.title.font.size = 16,
+    heading.subtitle.font.size = 12,
+    table.font.size = 11
+  )
 ```
 
