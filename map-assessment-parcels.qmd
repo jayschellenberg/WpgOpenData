@@ -916,23 +916,24 @@ cli_alert_success("Residential neighbourhood dissolve: {nrow(res_neighbourhood_s
 # Quantile breaks for choropleths
 yb_vals <- res_neighbourhood_sf$Median_Year_Built[!is.na(res_neighbourhood_sf$Median_Year_Built)]
 yb_breaks <- as.numeric(quantile(yb_vals, probs = c(0, 0.2, 0.4, 0.6, 0.8, 1.0)))
-yb_colors <- c("#ffffcc", "#c7e9b4", "#7fcdbb", "#41b6c4", "#1d91c0", "#225ea8")
+yb_colors <- c("#2166ac", "#67a9cf", "#d1e5f0", "#fddbc7", "#ef8a62", "#b2182b")
 
 la_vals <- res_neighbourhood_sf$Median_Living_Area[!is.na(res_neighbourhood_sf$Median_Living_Area)]
 la_breaks <- as.numeric(quantile(la_vals, probs = c(0, 0.2, 0.4, 0.6, 0.8, 1.0)))
-la_colors <- c("#feebe2", "#fcc5c0", "#fa9fb5", "#f768a1", "#c51b8a", "#7a0177")
+la_colors <- c("#2166ac", "#67a9cf", "#d1e5f0", "#fddbc7", "#ef8a62", "#b2182b")
 ```
 
 ```{r}
 #| label: res-map
 
 # --- Parcel-level colour scales for year built and living area ---
-# Year built: older = cool/light, newer = warm/dark
-yb_parcel_colors <- c("#ffffcc", "#c7e9b4", "#7fcdbb", "#41b6c4", "#1d91c0", "#225ea8")
+# Blue (old/small) → Red (new/large)
+blue_to_red <- c("#2166ac", "#67a9cf", "#d1e5f0", "#fddbc7", "#ef8a62", "#b2182b")
+
+yb_parcel_colors <- blue_to_red
 yb_parcel_breaks <- c(1900, 1950, 1970, 1985, 2000, 2015)
 
-# Living area: smaller = light, larger = dark
-la_parcel_colors <- c("#feebe2", "#fcc5c0", "#fa9fb5", "#f768a1", "#c51b8a", "#7a0177")
+la_parcel_colors <- blue_to_red
 la_parcel_breaks <- c(500, 800, 1100, 1500, 2200, 4000)
 
 # Shared tooltip for all 3D layers
